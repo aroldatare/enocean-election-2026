@@ -8,8 +8,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html,body,#root{height:100%;background:#080808}
@@ -25,79 +23,17 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-/* ── FIREBASE CONFIG — paste your config here ── */
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAgfxOdanN5zwGh55bubUgmgM3NDFO8eFw",
-  authDomain: "elections-2026-f055d.firebaseapp.com",
-  databaseURL: "https://elections-2026-f055d-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "elections-2026-f055d",
-  storageBucket: "elections-2026-f055d.firebasestorage.app",
-  messagingSenderId: "383407523164",
-  appId: "1:383407523164:web:34b5cdfcb57f740baa6d99"
-};
-
-const CONFIGURED = !FIREBASE_CONFIG.apiKey.includes("PASTE");
-
-/* ── Sanitize Firebase data (arrays become objects) ── */
-function sanitize(data) {
-  if (!data) return data;
-  if (Array.isArray(data)) return data.map(sanitize);
-  if (typeof data === "object") {
-    // Check if it looks like an array (numeric keys)
-    const keys = Object.keys(data);
-    const isArr = keys.length > 0 && keys.every(k => !isNaN(parseInt(k)));
-    if (isArr) {
-      return keys.sort((a,b)=>parseInt(a)-parseInt(b)).map(k => sanitize(data[k]));
-    }
-    const out = {};
-    for (const k of keys) out[k] = sanitize(data[k]);
-    return out;
-  }
-  return data;
-}
-
-/* ── FIREBASE REALTIME SYNC ── */
 function useStore(key, def) {
-  const [s, set] = useState(def);
-  const [synced, setSynced] = useState(false);
-  const dbRef = useRef(null);
-  const skipNext = useRef(false);
-
+  const [s, set] = useState(() => {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; }
+    catch { return def; }
+  });
   useEffect(() => {
-    try {
-      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-      const db = firebase.database();
-      dbRef.current = db.ref(key);
-      dbRef.current.on("value", snap => {
-        const val = snap.val();
-        if (val !== null) {
-          skipNext.current = true;
-          set(sanitize(val));
-        }
-        setSynced(true);
-      });
-    } catch(e) {
-      console.error("Firebase error:", e);
-      try { const v = localStorage.getItem(key); if (v) set(JSON.parse(v)); } catch {}
-      setSynced(true);
-    }
-    return () => { if (dbRef.current) dbRef.current.off(); };
-  }, []);
-
-  useEffect(() => {
-    if (!synced) return;
-    if (skipNext.current) { skipNext.current = false; return; }
-    if (dbRef.current) {
-      dbRef.current.set(s);
-    } else {
-      try { localStorage.setItem(key, JSON.stringify(s)); } catch {}
-    }
-  }, [s, synced]);
-
-  return [s, set, synced, true];
+    try { localStorage.setItem(key, JSON.stringify(s)); } catch {}
+  }, [s]);
+  return [s, set];
 }
 
-/* ── SEED DATA ── */
 const SEED = [{
   id:"m1", date:"04.03.2026", title:"Kick-off Meeting", author:"Chairwoman", items:[
     {id:"i1",  text:"Inform all employees via all channels: whiteboard, email and official letter", tag:"Comms",    done:false},
@@ -127,9 +63,8 @@ const TAGS = {
 const MEMBERS = ["Chairwoman","Member 1","Member 2","Member 3"];
 const MC = {"Chairwoman":"#5de88a","Member 1":"#60b4ff","Member 2":"#e8d45d","Member 3":"#ff8c60"};
 
-/* ── HEADER ── */
 function Header({meetings, onNew}) {
-  const all = meetings.flatMap(m=>Array.isArray(m.items)?m.items:[]);
+  const all = meetings.flatMap(m=>m.items||[]);
   const done = all.filter(i=>i.done).length;
   const pct = all.length ? Math.round(done/all.length*100) : 0;
   const days = Math.max(0, Math.ceil((new Date("2026-05-13")-new Date())/86400000));
@@ -137,9 +72,7 @@ function Header({meetings, onNew}) {
     <div style={{background:"#0d0d0d",borderBottom:"1px solid #1a1a1a"}}>
       <div style={{display:"flex",alignItems:"center",padding:"0 28px",height:52,borderBottom:"1px solid #141414"}}>
         <div style={{display:"flex",alignItems:"baseline",gap:10,marginRight:32}}>
-          <span style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:800,color:"#fff",letterSpacing:"-0.02em"}}>
-            Election <span style={{color:"#5de88a"}}>2026</span>
-          </span>
+          <span style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:800,color:"#fff",letterSpacing:"-0.02em"}}>Election <span style={{color:"#5de88a"}}>2026</span></span>
           <span style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#333",letterSpacing:"0.14em",textTransform:"uppercase"}}>EnOcean GmbH</span>
         </div>
         <div style={{width:1,height:20,background:"#1e1e1e",marginRight:32}}/>
@@ -151,32 +84,25 @@ function Header({meetings, onNew}) {
         ))}
         <button onClick={onNew} style={{marginLeft:"auto",fontFamily:"'DM Mono',monospace",fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",padding:"6px 14px",background:"none",border:"1px solid #2a2a2a",borderRadius:4,color:"#444",cursor:"pointer",transition:"all 0.15s"}}
           onMouseEnter={e=>{e.currentTarget.style.color="#5de88a";e.currentTarget.style.borderColor="#5de88a"}}
-          onMouseLeave={e=>{e.currentTarget.style.color="#444";e.currentTarget.style.borderColor="#2a2a2a"}}>
-          + New Session
-        </button>
+          onMouseLeave={e=>{e.currentTarget.style.color="#444";e.currentTarget.style.borderColor="#2a2a2a"}}>+ New Session</button>
       </div>
     </div>
   );
 }
 
-/* ── TAG CHIP ── */
 function Tag({t}) {
   const c = TAGS[t]||TAGS.General;
   return <span style={{background:c.bg,color:c.text,fontFamily:"'DM Mono',monospace",fontSize:9,fontWeight:500,letterSpacing:"0.12em",textTransform:"uppercase",padding:"3px 8px",borderRadius:3,display:"inline-flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
-    <span style={{width:5,height:5,borderRadius:"50%",background:c.dot,display:"inline-block"}}/>
-    {t}
+    <span style={{width:5,height:5,borderRadius:"50%",background:c.dot,display:"inline-block"}}/>{t}
   </span>;
 }
 
-/* ── ITEM ROW ── */
 function Item({item, noteId, onToggle, onEdit, onDelete}) {
   const [hover, setHover] = useState(false);
   return (
     <div onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
       style={{display:"flex",alignItems:"flex-start",gap:14,padding:"13px 20px",borderBottom:"1px solid #141414",background:hover?"#111":"transparent",transition:"background 0.1s"}}>
-      <button onClick={()=>onToggle(noteId,item.id)} style={{width:20,height:20,minWidth:20,borderRadius:4,marginTop:2,border:`1.5px solid ${item.done?"#5de88a":"#2a2a2a"}`,background:item.done?"#5de88a":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#0d0d0d",fontWeight:900,transition:"all 0.15s",boxShadow:item.done?"0 0 12px rgba(93,232,138,0.3)":"none"}}>
-        {item.done?"✓":""}
-      </button>
+      <button onClick={()=>onToggle(noteId,item.id)} style={{width:20,height:20,minWidth:20,borderRadius:4,marginTop:2,border:`1.5px solid ${item.done?"#5de88a":"#2a2a2a"}`,background:item.done?"#5de88a":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#0d0d0d",fontWeight:900,transition:"all 0.15s",boxShadow:item.done?"0 0 12px rgba(93,232,138,0.3)":"none"}}>{item.done?"✓":""}</button>
       <div style={{flex:1,minWidth:0}}>
         <p style={{margin:"0 0 6px",fontFamily:"'DM Sans',sans-serif",fontSize:13.5,color:item.done?"#333":"#ccc",lineHeight:1.5,textDecoration:item.done?"line-through":"none",transition:"all 0.2s"}}>{item.text}</p>
         <Tag t={item.tag}/>
@@ -189,7 +115,6 @@ function Item({item, noteId, onToggle, onEdit, onDelete}) {
   );
 }
 
-/* ── MEETING PANEL ── */
 function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, onAddComment, onDelete}) {
   const [newText, setNewText] = useState("");
   const [newTag, setNewTag] = useState("Action");
@@ -201,17 +126,15 @@ function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, o
   const [tab, setTab] = useState("open");
   const [filter, setFilter] = useState("All");
 
-  const items = Array.isArray(meeting.items) ? meeting.items : [];
-  const comments = Array.isArray(meeting.comments) ? meeting.comments : [];
+  const items = meeting.items||[];
+  const comments = meeting.comments||[];
   const open = items.filter(i=>!i.done);
   const done = items.filter(i=>i.done);
   const displayed = (tab==="open"?open:done).filter(i=>filter==="All"||i.tag===filter);
-
   const inp = {background:"#0d0d0d",border:"1px solid #2a2a2a",borderRadius:4,padding:"9px 12px",color:"#ccc",fontFamily:"'DM Mono',monospace",fontSize:12,outline:"none",width:"100%",marginBottom:12,boxSizing:"border-box"};
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-      {/* Session header */}
       <div style={{padding:"24px 28px 20px",borderBottom:"1px solid #1a1a1a",background:"#0d0d0d"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
@@ -234,8 +157,7 @@ function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, o
         </div>
       </div>
 
-      {/* Tabs + filters */}
-      <div style={{display:"flex",alignItems:"center",borderBottom:"1px solid #1a1a1a",background:"#0a0a0a",padding:"0 28px",flexWrap:"wrap",gap:0}}>
+      <div style={{display:"flex",alignItems:"center",borderBottom:"1px solid #1a1a1a",background:"#0a0a0a",padding:"0 28px",flexWrap:"wrap"}}>
         {[["open","Open","#5de88a"],["done","Done","#444"],["comments","Discussion","#60b4ff"]].map(([id,label,c])=>(
           <button key={id} onClick={()=>setTab(id)} style={{fontFamily:"'DM Mono',monospace",fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:tab===id?c:"#333",borderBottom:tab===id?`2px solid ${c}`:"2px solid transparent",transition:"all 0.15s"}}>
             {label}{id==="open"&&open.length>0?` (${open.length})`:id==="done"&&done.length>0?` (${done.length})`:id==="comments"&&comments.length>0?` (${comments.length})`:""}
@@ -250,19 +172,13 @@ function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, o
         )}
       </div>
 
-      {/* Items */}
       <div style={{flex:1,overflowY:"auto"}}>
         {tab!=="comments" && <>
-          {displayed.length===0 && (
-            <div style={{padding:"40px 28px",textAlign:"center",fontFamily:"'DM Mono',monospace",fontSize:11,color:"#2a2a2a",letterSpacing:"0.1em"}}>
-              {tab==="open"?"ALL CLEAR — NO OPEN ITEMS":"NOTHING COMPLETED YET"}
-            </div>
-          )}
+          {displayed.length===0 && <div style={{padding:"40px 28px",textAlign:"center",fontFamily:"'DM Mono',monospace",fontSize:11,color:"#2a2a2a",letterSpacing:"0.1em"}}>{tab==="open"?"ALL CLEAR — NO OPEN ITEMS":"NOTHING COMPLETED YET"}</div>}
           {displayed.map(item=>
             editItem?.id===item.id ? (
               <div key={item.id} style={{padding:"14px 20px",borderBottom:"1px solid #141414",background:"#111"}}>
-                <textarea value={editText} onChange={e=>setEditText(e.target.value)} rows={2}
-                  style={{width:"100%",background:"#0a0a0a",border:"1px solid #2a2a2a",borderRadius:4,padding:"8px 10px",color:"#ccc",fontFamily:"'DM Sans',sans-serif",fontSize:13,resize:"vertical",outline:"none",marginBottom:8,boxSizing:"border-box"}}/>
+                <textarea value={editText} onChange={e=>setEditText(e.target.value)} rows={2} style={{width:"100%",background:"#0a0a0a",border:"1px solid #2a2a2a",borderRadius:4,padding:"8px 10px",color:"#ccc",fontFamily:"'DM Sans',sans-serif",fontSize:13,resize:"vertical",outline:"none",marginBottom:8,boxSizing:"border-box"}}/>
                 <div style={{display:"flex",gap:6}}>
                   <select value={editTag} onChange={e=>setEditTag(e.target.value)} style={{background:"#0a0a0a",border:"1px solid #2a2a2a",color:"#888",borderRadius:4,padding:"5px 8px",fontFamily:"'DM Mono',monospace",fontSize:11,outline:"none"}}>
                     {Object.keys(TAGS).map(t=><option key={t}>{t}</option>)}
@@ -272,12 +188,9 @@ function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, o
                 </div>
               </div>
             ) : (
-              <Item key={item.id} item={item} noteId={meeting.id} onToggle={onToggle}
-                onEdit={item=>{setEditItem(item);setEditText(item.text);setEditTag(item.tag);}}
-                onDelete={onDeleteItem}/>
+              <Item key={item.id} item={item} noteId={meeting.id} onToggle={onToggle} onEdit={i=>{setEditItem(i);setEditText(i.text);setEditTag(i.tag);}} onDelete={onDeleteItem}/>
             )
           )}
-          {/* Add item */}
           <div style={{padding:"16px 20px",borderTop:"1px solid #141414",background:"#080808"}}>
             <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
               <textarea value={newText} onChange={e=>setNewText(e.target.value)} placeholder="New action item…" rows={2}
@@ -287,23 +200,16 @@ function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, o
                 <select value={newTag} onChange={e=>setNewTag(e.target.value)} style={{background:"#0d0d0d",border:"1px solid #1e1e1e",color:"#666",borderRadius:4,padding:"6px 8px",fontFamily:"'DM Mono',monospace",fontSize:10,outline:"none",letterSpacing:"0.06em"}}>
                   {Object.keys(TAGS).map(t=><option key={t}>{t}</option>)}
                 </select>
-                <button onClick={()=>{onAddItem(meeting.id,newText,newTag);setNewText("");}}
-                  style={{background:"#1a3a25",border:"none",color:"#5de88a",borderRadius:4,padding:"7px 14px",fontFamily:"'DM Mono',monospace",fontSize:11,cursor:"pointer",letterSpacing:"0.1em",fontWeight:600,transition:"all 0.15s",whiteSpace:"nowrap"}}
-                  onMouseEnter={e=>e.currentTarget.style.background="#1f4a2d"}
-                  onMouseLeave={e=>e.currentTarget.style.background="#1a3a25"}>
-                  + ADD
-                </button>
+                <button onClick={()=>{onAddItem(meeting.id,newText,newTag);setNewText("");}} style={{background:"#1a3a25",border:"none",color:"#5de88a",borderRadius:4,padding:"7px 14px",fontFamily:"'DM Mono',monospace",fontSize:11,cursor:"pointer",letterSpacing:"0.1em",fontWeight:600,transition:"all 0.15s",whiteSpace:"nowrap"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="#1f4a2d"} onMouseLeave={e=>e.currentTarget.style.background="#1a3a25"}>+ ADD</button>
               </div>
             </div>
             <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#222",marginTop:6,letterSpacing:"0.08em"}}>CTRL+ENTER TO SAVE</div>
           </div>
         </>}
-
         {tab==="comments" && (
           <div style={{padding:"20px"}}>
-            {comments.length===0 && (
-              <div style={{textAlign:"center",padding:"32px",fontFamily:"'DM Mono',monospace",fontSize:11,color:"#2a2a2a",letterSpacing:"0.1em"}}>NO COMMENTS YET</div>
-            )}
+            {comments.length===0 && <div style={{textAlign:"center",padding:"32px",fontFamily:"'DM Mono',monospace",fontSize:11,color:"#2a2a2a",letterSpacing:"0.1em"}}>NO COMMENTS YET</div>}
             {comments.map(c=>(
               <div key={c.id} style={{marginBottom:16,padding:"14px 16px",background:"#0d0d0d",border:"1px solid #1a1a1a",borderLeft:`3px solid ${MC[c.author]||"#444"}`,borderRadius:"0 6px 6px 0"}}>
                 <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:8}}>
@@ -315,15 +221,9 @@ function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, o
               </div>
             ))}
             <div style={{marginTop:20,padding:"16px",background:"#0a0a0a",border:"1px solid #1a1a1a",borderRadius:6}}>
-              <select value={commentAuthor} onChange={e=>setCommentAuthor(e.target.value)} style={{...inp,marginBottom:8}}>
-                {MEMBERS.map(m=><option key={m}>{m}</option>)}
-              </select>
-              <textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Write a comment…" rows={2}
-                style={{...inp,marginBottom:8,resize:"none"}}/>
-              <button onClick={()=>{onAddComment(meeting.id,commentText,commentAuthor);setCommentText("");}}
-                style={{background:"#1a2a3a",border:"none",color:"#60b4ff",borderRadius:4,padding:"7px 18px",fontFamily:"'DM Mono',monospace",fontSize:11,cursor:"pointer",letterSpacing:"0.1em"}}>
-                POST COMMENT
-              </button>
+              <select value={commentAuthor} onChange={e=>setCommentAuthor(e.target.value)} style={{...inp,marginBottom:8}}>{MEMBERS.map(m=><option key={m}>{m}</option>)}</select>
+              <textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Write a comment…" rows={2} style={{...inp,marginBottom:8,resize:"none"}}/>
+              <button onClick={()=>{onAddComment(meeting.id,commentText,commentAuthor);setCommentText("");}} style={{background:"#1a2a3a",border:"none",color:"#60b4ff",borderRadius:4,padding:"7px 18px",fontFamily:"'DM Mono',monospace",fontSize:11,cursor:"pointer",letterSpacing:"0.1em"}}>POST COMMENT</button>
             </div>
           </div>
         )}
@@ -332,7 +232,6 @@ function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, o
   );
 }
 
-/* ── MODAL ── */
 function Modal({onClose, onSave}) {
   const [date,setDate]=useState("");
   const [title,setTitle]=useState("");
@@ -344,15 +243,11 @@ function Modal({onClose, onSave}) {
       <div style={{background:"#0d0d0d",border:"1px solid #2a2a2a",borderRadius:8,padding:32,width:400,maxWidth:"90vw",boxShadow:"0 40px 80px rgba(0,0,0,0.8)",animation:"fadeUp 0.2s ease"}}>
         <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:"#fff",marginBottom:24,letterSpacing:"-0.02em"}}>New Session</div>
         <label style={lbl}>Date</label>
-        <input style={inp} value={date} onChange={e=>setDate(e.target.value)} placeholder="e.g. 15.03.2026"
-          onFocus={e=>e.target.style.borderColor="#5de88a"} onBlur={e=>e.target.style.borderColor="#2a2a2a"}/>
+        <input style={inp} value={date} onChange={e=>setDate(e.target.value)} placeholder="e.g. 15.03.2026" onFocus={e=>e.target.style.borderColor="#5de88a"} onBlur={e=>e.target.style.borderColor="#2a2a2a"}/>
         <label style={lbl}>Title</label>
-        <input style={inp} value={title} onChange={e=>setTitle(e.target.value)} placeholder="Meeting title"
-          onFocus={e=>e.target.style.borderColor="#5de88a"} onBlur={e=>e.target.style.borderColor="#2a2a2a"}/>
+        <input style={inp} value={title} onChange={e=>setTitle(e.target.value)} placeholder="Meeting title" onFocus={e=>e.target.style.borderColor="#5de88a"} onBlur={e=>e.target.style.borderColor="#2a2a2a"}/>
         <label style={lbl}>Created by</label>
-        <select style={{...inp,marginBottom:24}} value={author} onChange={e=>setAuthor(e.target.value)}>
-          {MEMBERS.map(m=><option key={m}>{m}</option>)}
-        </select>
+        <select style={{...inp,marginBottom:24}} value={author} onChange={e=>setAuthor(e.target.value)}>{MEMBERS.map(m=><option key={m}>{m}</option>)}</select>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>onSave(date,title,author)} style={{flex:1,background:"#1a3a25",border:"none",color:"#5de88a",borderRadius:4,padding:"10px",fontFamily:"'DM Mono',monospace",fontSize:11,letterSpacing:"0.12em",fontWeight:600,cursor:"pointer"}}>CREATE SESSION</button>
           <button onClick={onClose} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#555",borderRadius:4,padding:"10px 16px",fontFamily:"'DM Mono',monospace",fontSize:11,cursor:"pointer"}}>cancel</button>
@@ -362,13 +257,11 @@ function Modal({onClose, onSave}) {
   );
 }
 
-/* ── APP ── */
 function App() {
-  const [meetings, setMeetings, synced, configured] = useStore("enocean_notes_v1", SEED);
+  const [meetings, setMeetings] = useStore("enocean_notes_v1", SEED);
   const [active, setActive] = useState("m1");
   const [showModal, setShowModal] = useState(false);
   const [confetti, setConfetti] = useState([]);
-
   const current = meetings.find(m=>m.id===active)||meetings[0];
 
   function boom() {
@@ -377,58 +270,24 @@ function App() {
     setTimeout(()=>setConfetti([]),1400);
   }
 
-  function toggleItem(mid,iid) {
-    const item=meetings.find(m=>m.id===mid)?.items.find(i=>i.id===iid);
-    if(item&&!item.done) boom();
-    setMeetings(meetings.map(m=>m.id===mid?{...m,items:m.items.map(i=>i.id===iid?{...i,done:!i.done}:i)}:m));
-  }
-  function addItem(mid,text,tag){if(!text.trim())return;setMeetings(meetings.map(m=>m.id===mid?{...m,items:[...m.items,{id:`i-${Date.now()}`,text,tag,done:false}]}:m));}
-  function editItem(mid,iid,text,tag){setMeetings(meetings.map(m=>m.id===mid?{...m,items:m.items.map(i=>i.id===iid?{...i,text,tag}:i)}:m));}
-  function deleteItem(mid,iid){setMeetings(meetings.map(m=>m.id===mid?{...m,items:m.items.filter(i=>i.id!==iid)}:m));}
-  function addComment(mid,text,author){if(!text.trim())return;setMeetings(meetings.map(m=>m.id===mid?{...m,comments:[...m.comments,{id:`c-${Date.now()}`,author,text,time:new Date().toLocaleString("de-DE")}]}:m));}
+  function toggleItem(mid,iid){const item=meetings.find(m=>m.id===mid)?.items?.find(i=>i.id===iid);if(item&&!item.done)boom();setMeetings(meetings.map(m=>m.id===mid?{...m,items:(m.items||[]).map(i=>i.id===iid?{...i,done:!i.done}:i)}:m));}
+  function addItem(mid,text,tag){if(!text.trim())return;setMeetings(meetings.map(m=>m.id===mid?{...m,items:[...(m.items||[]),{id:`i-${Date.now()}`,text,tag,done:false}]}:m));}
+  function editItem(mid,iid,text,tag){setMeetings(meetings.map(m=>m.id===mid?{...m,items:(m.items||[]).map(i=>i.id===iid?{...i,text,tag}:i)}:m));}
+  function deleteItem(mid,iid){setMeetings(meetings.map(m=>m.id===mid?{...m,items:(m.items||[]).filter(i=>i.id!==iid)}:m));}
+  function addComment(mid,text,author){if(!text.trim())return;setMeetings(meetings.map(m=>m.id===mid?{...m,comments:[...(m.comments||[]),{id:`c-${Date.now()}`,author,text,time:new Date().toLocaleString("de-DE")}]}:m));}
   function deleteMeeting(mid){const r=meetings.filter(m=>m.id!==mid);setMeetings(r);setActive(r[0]?.id||null);}
-  function createMeeting(date,title,author){
-    if(!date||!title)return;
-    const m={id:`m-${Date.now()}`,date,title,author,items:[],comments:[]};
-    setMeetings([...meetings,m]);setActive(m.id);setShowModal(false);
-  }
+  function createMeeting(date,title,author){if(!date||!title)return;const m={id:`m-${Date.now()}`,date,title,author,items:[],comments:[]};setMeetings([...meetings,m]);setActive(m.id);setShowModal(false);}
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#080808",overflow:"hidden",fontFamily:"'DM Sans',sans-serif"}}>
-      {/* Confetti */}
       <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:9999,overflow:"hidden"}}>
-        {confetti.map(p=>(
-          <div key={p.id} style={{position:"absolute",left:`${p.x}%`,top:-10,width:p.size,height:p.size,borderRadius:2,background:p.color,animation:`fall 1.4s ease-in forwards`,animationDelay:`${p.delay}s`}}/>
-        ))}
+        {confetti.map(p=>(<div key={p.id} style={{position:"absolute",left:`${p.x}%`,top:-10,width:p.size,height:p.size,borderRadius:2,background:p.color,animation:`fall 1.4s ease-in forwards`,animationDelay:`${p.delay}s`}}/>))}
       </div>
-
-      {/* Firebase setup banner */}
-      {!configured && (
-        <div style={{background:"#1a2a1a",borderBottom:"1px solid #2a4a2a",padding:"10px 28px",display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#5de88a",letterSpacing:"0.12em"}}>⚠ RUNNING IN LOCAL MODE</span>
-          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#444"}}>—</span>
-          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#555"}}>Add your Firebase config to enable real-time sync across all 4 committee members</span>
-        </div>
-      )}
-      {configured && !synced && (
-        <div style={{background:"#1a1a2a",borderBottom:"1px solid #2a2a4a",padding:"10px 28px"}}>
-          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#60b4ff",letterSpacing:"0.12em"}}>⟳ CONNECTING TO DATABASE...</span>
-        </div>
-      )}
-      {configured && synced && (
-        <div style={{background:"#0f1a0f",borderBottom:"1px solid #1a3a1a",padding:"8px 28px",display:"flex",alignItems:"center",gap:8}}>
-          <span style={{width:6,height:6,borderRadius:"50%",background:"#5de88a",display:"inline-block",boxShadow:"0 0 6px #5de88a"}}/>
-          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#2a4a2a",letterSpacing:"0.12em"}}>LIVE SYNC ACTIVE — all committee members see changes in real time</span>
-        </div>
-      )}
-
       <Header meetings={meetings} onNew={()=>setShowModal(true)}/>
-
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-        {/* Sidebar */}
         <div style={{width:220,borderRight:"1px solid #141414",background:"#090909",overflowY:"auto",flexShrink:0}}>
           {meetings.map(m=>{
-            const mitems=Array.isArray(m.items)?m.items:[];
+            const mitems=m.items||[];
             const open=mitems.filter(i=>!i.done).length;
             const pct=mitems.length?Math.round(mitems.filter(i=>i.done).length/mitems.length*100):0;
             const isActive=active===m.id;
@@ -439,26 +298,18 @@ function App() {
                 <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#5de88a",letterSpacing:"0.16em",textTransform:"uppercase",marginBottom:5}}>{m.date}</div>
                 <div style={{fontFamily:"'Syne',sans-serif",fontSize:12,fontWeight:600,color:isActive?"#fff":"#555",lineHeight:1.3,marginBottom:8}}>{m.title}</div>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <div style={{flex:1,height:2,background:"#141414",borderRadius:99}}>
-                    <div style={{width:`${pct}%`,height:"100%",background:"#5de88a",borderRadius:99,transition:"width 0.4s"}}/>
-                  </div>
+                  <div style={{flex:1,height:2,background:"#141414",borderRadius:99}}><div style={{width:`${pct}%`,height:"100%",background:"#5de88a",borderRadius:99,transition:"width 0.4s"}}/></div>
                   {open>0&&<span style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#5de88a",background:"#1a3a25",padding:"1px 5px",borderRadius:3}}>{open}</span>}
                 </div>
               </button>
             );
           })}
         </div>
-
-        {/* Main */}
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-          {current ? (
-            <MeetingPanel meeting={current} onToggle={toggleItem} onAddItem={addItem} onEditItem={editItem} onDeleteItem={deleteItem} onAddComment={addComment} onDelete={deleteMeeting}/>
-          ) : (
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,fontFamily:"'DM Mono',monospace",fontSize:11,color:"#222",letterSpacing:"0.16em",textTransform:"uppercase"}}>NO SESSION SELECTED</div>
-          )}
+          {current ? <MeetingPanel meeting={current} onToggle={toggleItem} onAddItem={addItem} onEditItem={editItem} onDeleteItem={deleteItem} onAddComment={addComment} onDelete={deleteMeeting}/>
+            : <div style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,fontFamily:"'DM Mono',monospace",fontSize:11,color:"#222",letterSpacing:"0.16em",textTransform:"uppercase"}}>NO SESSION SELECTED</div>}
         </div>
       </div>
-
       {showModal&&<Modal onClose={()=>setShowModal(false)} onSave={createMeeting}/>}
     </div>
   );
