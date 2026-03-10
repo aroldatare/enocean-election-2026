@@ -23,16 +23,70 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-/* ── STORAGE (localStorage for SharePoint) ── */
+/* ── FIREBASE CONFIG — paste your config here ── */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAgfxOdanN5zwGh55bubUgmgM3NDFO8eFw",
+  authDomain: "elections-2026-f055d.firebaseapp.com",
+  databaseURL: "https://elections-2026-f055d-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "elections-2026-f055d",
+  storageBucket: "elections-2026-f055d.firebasestorage.app",
+  messagingSenderId: "383407523164",
+  appId: "1:383407523164:web:34b5cdfcb57f740baa6d99"
+};
+
+const CONFIGURED = !FIREBASE_CONFIG.apiKey.includes("PASTE");
+
+/* ── FIREBASE REALTIME SYNC ── */
 function useStore(key, def) {
-  const [s, set] = useState(() => {
-    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; }
-    catch { return def; }
-  });
+  const [s, set] = useState(def);
+  const [synced, setSynced] = useState(false);
+  const dbRef = useRef(null);
+  const skipNext = useRef(false);
+
   useEffect(() => {
-    try { localStorage.setItem(key, JSON.stringify(s)); } catch {}
-  }, [s]);
-  return [s, set];
+    if (!CONFIGURED) {
+      // Fall back to localStorage if not configured yet
+      try { const v = localStorage.getItem(key); if (v) set(JSON.parse(v)); } catch {}
+      setSynced(true);
+      return;
+    }
+    // Load Firebase dynamically
+    const script1 = document.createElement("script");
+    script1.src = "https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js";
+    script1.onload = () => {
+      const script2 = document.createElement("script");
+      script2.src = "https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js";
+      script2.onload = () => {
+        if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+        const db = firebase.database();
+        dbRef.current = db.ref(key);
+        // Listen for real-time changes
+        dbRef.current.on("value", snap => {
+          const val = snap.val();
+          if (val !== null) {
+            skipNext.current = true;
+            set(val);
+          }
+          setSynced(true);
+        });
+      };
+      document.head.appendChild(script2);
+    };
+    document.head.appendChild(script1);
+    return () => { if (dbRef.current) dbRef.current.off(); };
+  }, []);
+
+  useEffect(() => {
+    if (!synced) return;
+    if (skipNext.current) { skipNext.current = false; return; }
+    if (CONFIGURED && dbRef.current) {
+      dbRef.current.set(s);
+    } else {
+      try { localStorage.setItem(key, JSON.stringify(s)); } catch {}
+    }
+  }, [s, synced]);
+
+  return [s, set, synced, CONFIGURED];
 }
 
 /* ── SEED DATA ── */
@@ -300,7 +354,7 @@ function Modal({onClose, onSave}) {
 
 /* ── APP ── */
 function App() {
-  const [meetings, setMeetings] = useStore("enocean_notes_v1", SEED);
+  const [meetings, setMeetings, synced, configured] = useStore("enocean_notes_v1", SEED);
   const [active, setActive] = useState("m1");
   const [showModal, setShowModal] = useState(false);
   const [confetti, setConfetti] = useState([]);
@@ -337,6 +391,26 @@ function App() {
           <div key={p.id} style={{position:"absolute",left:`${p.x}%`,top:-10,width:p.size,height:p.size,borderRadius:2,background:p.color,animation:`fall 1.4s ease-in forwards`,animationDelay:`${p.delay}s`}}/>
         ))}
       </div>
+
+      {/* Firebase setup banner */}
+      {!configured && (
+        <div style={{background:"#1a2a1a",borderBottom:"1px solid #2a4a2a",padding:"10px 28px",display:"flex",alignItems:"center",gap:12}}>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#5de88a",letterSpacing:"0.12em"}}>⚠ RUNNING IN LOCAL MODE</span>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#444"}}>—</span>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#555"}}>Add your Firebase config to enable real-time sync across all 4 committee members</span>
+        </div>
+      )}
+      {configured && !synced && (
+        <div style={{background:"#1a1a2a",borderBottom:"1px solid #2a2a4a",padding:"10px 28px"}}>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#60b4ff",letterSpacing:"0.12em"}}>⟳ CONNECTING TO DATABASE...</span>
+        </div>
+      )}
+      {configured && synced && (
+        <div style={{background:"#0f1a0f",borderBottom:"1px solid #1a3a1a",padding:"8px 28px",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{width:6,height:6,borderRadius:"50%",background:"#5de88a",display:"inline-block",boxShadow:"0 0 6px #5de88a"}}/>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#2a4a2a",letterSpacing:"0.12em"}}>LIVE SYNC ACTIVE — all committee members see changes in real time</span>
+        </div>
+      )}
 
       <Header meetings={meetings} onNew={()=>setShowModal(true)}/>
 
