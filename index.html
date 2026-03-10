@@ -38,6 +38,24 @@ const FIREBASE_CONFIG = {
 
 const CONFIGURED = !FIREBASE_CONFIG.apiKey.includes("PASTE");
 
+/* ── Sanitize Firebase data (arrays become objects) ── */
+function sanitize(data) {
+  if (!data) return data;
+  if (Array.isArray(data)) return data.map(sanitize);
+  if (typeof data === "object") {
+    // Check if it looks like an array (numeric keys)
+    const keys = Object.keys(data);
+    const isArr = keys.length > 0 && keys.every(k => !isNaN(parseInt(k)));
+    if (isArr) {
+      return keys.sort((a,b)=>parseInt(a)-parseInt(b)).map(k => sanitize(data[k]));
+    }
+    const out = {};
+    for (const k of keys) out[k] = sanitize(data[k]);
+    return out;
+  }
+  return data;
+}
+
 /* ── FIREBASE REALTIME SYNC ── */
 function useStore(key, def) {
   const [s, set] = useState(def);
@@ -54,7 +72,7 @@ function useStore(key, def) {
         const val = snap.val();
         if (val !== null) {
           skipNext.current = true;
-          set(val);
+          set(sanitize(val));
         }
         setSynced(true);
       });
