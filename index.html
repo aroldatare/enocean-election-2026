@@ -35,7 +35,7 @@ function useStore(key, def) {
 }
 
 const SEED = [{
-  id:"m1", date:"04.03.2026", title:"Kick-off Meeting", author:"Chairwoman", items:[
+  id:"m1", date:"04.03.2026", title:"Kick-off Meeting", author:"Arolda", items:[
     {id:"i1",  text:"Inform all employees via all channels: whiteboard, email and official letter", tag:"Comms",    done:false},
     {id:"i2",  text:"Clarify aktives/passives Wahlrecht — who can vote, who can stand",             tag:"Legal",    done:false},
     {id:"i3",  text:"Send Wählerliste agreement to Raoul for review",                               tag:"Action",   done:false},
@@ -60,8 +60,8 @@ const TAGS = {
   Timeline:{bg:"#1a3a3a",text:"#5de8e8",dot:"#5de8e8"},
   General: {bg:"#252525",text:"#aaaaaa",dot:"#aaaaaa"},
 };
-const MEMBERS = ["Chairwoman","Member 1","Member 2","Member 3"];
-const MC = {"Chairwoman":"#5de88a","Member 1":"#60b4ff","Member 2":"#e8d45d","Member 3":"#ff8c60"};
+const MEMBERS = ["Arolda","Zhuo","Slim","Arif"];
+const MC = {"Arolda":"#5de88a","Zhuo":"#60b4ff","Slim":"#e8d45d","Arif":"#ff8c60"};
 
 function Header({meetings, onNew}) {
   const all = meetings.flatMap(m=>m.items||[]);
@@ -122,7 +122,7 @@ function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, o
   const [editText, setEditText] = useState("");
   const [editTag, setEditTag] = useState("Action");
   const [commentText, setCommentText] = useState("");
-  const [commentAuthor, setCommentAuthor] = useState("Chairwoman");
+  const [commentAuthor, setCommentAuthor] = useState("Arolda");
   const [tab, setTab] = useState("open");
   const [filter, setFilter] = useState("All");
 
@@ -235,7 +235,7 @@ function MeetingPanel({meeting, onToggle, onAddItem, onEditItem, onDeleteItem, o
 function Modal({onClose, onSave}) {
   const [date,setDate]=useState("");
   const [title,setTitle]=useState("");
-  const [author,setAuthor]=useState("Chairwoman");
+  const [author,setAuthor]=useState("Arolda");
   const inp={background:"#0d0d0d",border:"1px solid #2a2a2a",borderRadius:4,padding:"9px 12px",color:"#ccc",fontFamily:"'DM Mono',monospace",fontSize:12,outline:"none",width:"100%",marginBottom:12,boxSizing:"border-box"};
   const lbl={fontFamily:"'DM Mono',monospace",fontSize:9,letterSpacing:"0.18em",textTransform:"uppercase",color:"#444",display:"block",marginBottom:5};
   return (
