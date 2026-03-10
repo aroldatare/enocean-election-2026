@@ -8,6 +8,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html,body,#root{height:100%;background:#080808}
@@ -44,49 +46,37 @@ function useStore(key, def) {
   const skipNext = useRef(false);
 
   useEffect(() => {
-    if (!CONFIGURED) {
-      // Fall back to localStorage if not configured yet
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+      const db = firebase.database();
+      dbRef.current = db.ref(key);
+      dbRef.current.on("value", snap => {
+        const val = snap.val();
+        if (val !== null) {
+          skipNext.current = true;
+          set(val);
+        }
+        setSynced(true);
+      });
+    } catch(e) {
+      console.error("Firebase error:", e);
       try { const v = localStorage.getItem(key); if (v) set(JSON.parse(v)); } catch {}
       setSynced(true);
-      return;
     }
-    // Load Firebase dynamically
-    const script1 = document.createElement("script");
-    script1.src = "https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js";
-    script1.onload = () => {
-      const script2 = document.createElement("script");
-      script2.src = "https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js";
-      script2.onload = () => {
-        if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-        const db = firebase.database();
-        dbRef.current = db.ref(key);
-        // Listen for real-time changes
-        dbRef.current.on("value", snap => {
-          const val = snap.val();
-          if (val !== null) {
-            skipNext.current = true;
-            set(val);
-          }
-          setSynced(true);
-        });
-      };
-      document.head.appendChild(script2);
-    };
-    document.head.appendChild(script1);
     return () => { if (dbRef.current) dbRef.current.off(); };
   }, []);
 
   useEffect(() => {
     if (!synced) return;
     if (skipNext.current) { skipNext.current = false; return; }
-    if (CONFIGURED && dbRef.current) {
+    if (dbRef.current) {
       dbRef.current.set(s);
     } else {
       try { localStorage.setItem(key, JSON.stringify(s)); } catch {}
     }
   }, [s, synced]);
 
-  return [s, set, synced, CONFIGURED];
+  return [s, set, synced, true];
 }
 
 /* ── SEED DATA ── */
